@@ -8,12 +8,12 @@ namespace myFridge.api
     [Route("api/[controller]")]
     public class ProductsController : ControllerBase
     {
-        private readonly IHttpClientFactory _factory;
+        private readonly IHttpClientFactory _httpFactory;
         private readonly IConfiguration _config;
 
-        public ProductsController(IHttpClientFactory factory, IConfiguration config)
+        public ProductsController(IHttpClientFactory httpFactory, IConfiguration config)
         {
-            _factory = factory;
+            _httpFactory = httpFactory;
             _config = config;
         }
 
@@ -22,27 +22,28 @@ namespace myFridge.api
         {
             try
             {
-                var client = _factory.CreateClient();
+                var client = _httpFactory.CreateClient();
 
-                var baseUrl = _config["Supabase:Url"];
-                var apiKey = _config["Supabase:ApiKey"];
+                var supabaseUrl = _config["SUPABASE_URL"];
+                var supabaseKey = _config["SUPABASE_API_KEY"];
 
-                var url = $"{baseUrl}/rest/v1/products?select=name,quantity,unit,expiration_date,users(email),storage_places(name)";
+                if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
+                    return StatusCode(500, new { error = "Supabase URL or API key not set in environment variables" });
+
+                // REST API для Supabase
+                var url = $"{supabaseUrl}/rest/v1/products?select=name,quantity,unit,expiration_date,users(email),storage_places(name)";
 
                 client.DefaultRequestHeaders.Clear();
-                client.DefaultRequestHeaders.Add("apikey", apiKey);
+                client.DefaultRequestHeaders.Add("apikey", supabaseKey);
                 client.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", apiKey);
+                    new AuthenticationHeaderValue("Bearer", supabaseKey);
 
                 var response = await client.GetAsync(url);
 
                 if (!response.IsSuccessStatusCode)
-                    return StatusCode((int)response.StatusCode,
-                        await response.Content.ReadAsStringAsync());
+                    return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
 
                 var json = await response.Content.ReadAsStringAsync();
-
-                // Можеш потім замінити на DTO
                 var data = JsonSerializer.Deserialize<object>(json);
 
                 return Ok(data);
