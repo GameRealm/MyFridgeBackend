@@ -1,9 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Net.Http.Headers;
-using System.Text.Json;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using myFridge.DTOs.Products;
 using myFridge.DTOs.StoragePlaces;
 using myFridge.DTOs.Users;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 namespace myFridge.Api;
 
 
@@ -21,32 +23,32 @@ public class productsController : ControllerBase
     }
     //Great
     [HttpGet]
-    public async Task<IActionResult> GetAllProducts([FromQuery] Guid userId)
+    public async Task<IActionResult> GetAllProducts()
     {
         var supabaseUrl = _config["SUPABASE_URL"];
         var supabaseKey = _config["SUPABASE_API_KEY"];
 
         if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
-            return StatusCode(500, new { error = "Supabase URL or API key not set in environment variables" });
+            return StatusCode(500, new { error = "Supabase URL or API key not set" });
 
         try
         {
             var client = _httpFactory.CreateClient();
-
-            // 🔥 ФІЛЬТР ПО КОРИСТУВАЧУ
-            var url = $"{supabaseUrl}/rest/v1/products" +
-                      $"?user_id=eq.{userId}" +
-                      $"&select=name,quantity,unit,expiration_date,users(email),storage_places(name)";
-
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("apikey", supabaseKey);
             client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", supabaseKey);
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey); // сервісний ключ
+
+            // 🔹 select з join на users та storage_places
+            var url = $"{supabaseUrl}/rest/v1/products?select=id,name,quantity,unit,expiration_date,users(id,email),storage_places(id,name)&order=created_at.asc";
 
             var response = await client.GetAsync(url);
 
             if (!response.IsSuccessStatusCode)
-                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, err);
+            }
 
             var json = await response.Content.ReadAsStringAsync();
 
@@ -113,30 +115,64 @@ public class productsController : ControllerBase
     {
         try
         {
-            var client = _httpFactory.CreateClient();
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader))
+                return Unauthorized(new { error = "Missing Authorization header" });
 
+            var token = authHeader.Replace("Bearer ", "");
+
+            // читаємо JWT користувача
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            var jwt = handler.ReadJwtToken(token);
+
+            var userId = jwt.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { error = "Invalid token: no user id" });
+
+            var client = _httpFactory.CreateClient();
             var supabaseUrl = _config["SUPABASE_URL"];
             var supabaseKey = _config["SUPABASE_API_KEY"];
 
-            if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
-                return StatusCode(500, new { error = "Supabase URL or API key not set" });
+            // 🔹 Перевіряємо, що storage_place_id належить цьому користувачу
+            var storageCheckUrl = $"{supabaseUrl}/rest/v1/storage_places?id=eq.{dto.Storage_Place_Id}&user_id=eq.{userId}";
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Add("apikey", supabaseKey);
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey); // сервісний ключ для bypass RLS
+            var storageCheckResp = await client.GetAsync(storageCheckUrl);
+            var storageJson = await storageCheckResp.Content.ReadAsStringAsync();
+            if (!storageCheckResp.IsSuccessStatusCode || storageJson == "[]")
+                return BadRequest(new
+                {
+                    error = "Invalid storage_place_id for this user",
+                    storagePlaceId = dto.Storage_Place_Id,
+                    userId,
+                    storageResponse = storageJson,
+                    storageCheckUrl
+                });
+
+            // 🔹 формуємо payload для вставки
+            var body = new
+            {
+                name = dto.Name,
+                quantity = dto.Quantity,
+                unit = dto.Unit,
+                expiration_date = dto.Expiration_Date,
+                storage_place_id = dto.Storage_Place_Id,
+                user_id = userId
+            };
 
             var url = $"{supabaseUrl}/rest/v1/products";
+            var json = JsonSerializer.Serialize(body);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("apikey", supabaseKey);
             client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", supabaseKey);
-
-            var json = JsonSerializer.Serialize(dto);
-            var content = new StringContent(json);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-
-            // важливо щоб Supabase повернув створений запис
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey); // сервісний ключ
             client.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
             var response = await client.PostAsync(url, content);
-
             var resp = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
@@ -149,6 +185,8 @@ public class productsController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
+
+
 
     [HttpPatch("{id}")]
     public async Task<IActionResult> UpdateProduct(Guid id, UpdateProductDto dto)

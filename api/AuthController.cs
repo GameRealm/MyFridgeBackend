@@ -92,7 +92,8 @@ public class AuthController : ControllerBase
         var usersClient = _httpFactory.CreateClient();
         usersClient.DefaultRequestHeaders.Clear();
         usersClient.DefaultRequestHeaders.Add("apikey", supabaseKey);
-        usersClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey);
+        usersClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey);
         usersClient.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
         var usersUrl = $"{supabaseUrl}/rest/v1/users";
@@ -109,12 +110,47 @@ public class AuthController : ControllerBase
         var usersContent = new StringContent(usersJson, Encoding.UTF8, "application/json");
 
         var usersResp = await usersClient.PostAsync(usersUrl, usersContent);
-
         if (!usersResp.IsSuccessStatusCode)
         {
             var err = await usersResp.Content.ReadAsStringAsync();
             Console.WriteLine("USERS TABLE ERROR: " + err);
-            // можна повернути повідомлення фронту або просто логувати
+        }
+
+        // після usersResp
+        if (!usersResp.IsSuccessStatusCode)
+        {
+            var err = await usersResp.Content.ReadAsStringAsync();
+            Console.WriteLine("USERS TABLE ERROR: " + err);
+        }
+        else
+        {
+            // ✅ вставка місць зберігання тільки якщо користувач успішно створений
+            var storageClient = _httpFactory.CreateClient();
+            storageClient.DefaultRequestHeaders.Clear();
+            storageClient.DefaultRequestHeaders.Add("apikey", supabaseKey);
+            storageClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey);
+            storageClient.DefaultRequestHeaders.Add("Prefer", "return=representation");
+
+            var storageUrl = $"{supabaseUrl}/rest/v1/storage_places";
+
+            var storagePlaces = new[]
+            {
+        new { name = "fridge", user_id = userId, created_at = DateTime.UtcNow },
+        new { name = "freezer", user_id = userId, created_at = DateTime.UtcNow },
+        new { name = "pantry", user_id = userId, created_at = DateTime.UtcNow }
+    };
+
+            var storageJson = JsonSerializer.Serialize(storagePlaces);
+            var storageContent = new StringContent(storageJson, Encoding.UTF8, "application/json");
+
+            var storageResp = await storageClient.PostAsync(storageUrl, storageContent);
+
+            if (!storageResp.IsSuccessStatusCode)
+            {
+                var err = await storageResp.Content.ReadAsStringAsync();
+                Console.WriteLine("STORAGE PLACES ERROR: " + err);
+            }
         }
 
         return Ok(new
@@ -124,5 +160,4 @@ public class AuthController : ControllerBase
             message = accessToken != null ? "Registration successful" : "Registration successful. Confirm email."
         });
     }
-
 }
