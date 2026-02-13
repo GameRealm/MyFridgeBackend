@@ -31,6 +31,18 @@ public class productsController : ControllerBase
         if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
             return StatusCode(500, new { error = "Supabase URL or API key not set" });
 
+        // Отримуємо userId з токена користувача
+        var authHeader = Request.Headers["Authorization"].ToString();
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            return Unauthorized(new { error = "Missing or invalid Authorization header" });
+
+        var userToken = authHeader.Substring("Bearer ".Length).Trim();
+        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(userToken);
+        var userId = jwt.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(new { error = "Invalid token: no user id" });
+
         try
         {
             var client = _httpFactory.CreateClient();
@@ -39,8 +51,8 @@ public class productsController : ControllerBase
             client.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey); // сервісний ключ
 
-            // 🔹 select з join на users та storage_places
-            var url = $"{supabaseUrl}/rest/v1/products?select=id,name,quantity,unit,expiration_date,users(id,email),storage_places(id,name)&order=created_at.asc";
+            // 🔹 select з join на users та storage_places, і фільтр по конкретному користувачу
+            var url = $"{supabaseUrl}/rest/v1/products?select=id,name,quantity,unit,expiration_date,users(id,email),storage_places(id,name)&user_id=eq.{userId}&order=created_at.asc";
 
             var response = await client.GetAsync(url);
 
@@ -72,44 +84,72 @@ public class productsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetProductById(Guid id)
     {
-        try
-        {
-            var client = _httpFactory.CreateClient();
+        var authHeader = Request.Headers["Authorization"].ToString();
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            return Unauthorized(new { error = "Missing Authorization header" });
 
-            var supabaseUrl = _config["SUPABASE_URL"];
-            var supabaseKey = _config["SUPABASE_API_KEY"];
+        var token = authHeader.Substring("Bearer ".Length).Trim();
 
-            if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
-                return StatusCode(500, new { error = "Supabase URL or API key not set" });
+        // 👉 читаємо JWT
+        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(token);
+        var userIdFromToken = jwt.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
 
-            var url = $"{supabaseUrl}/rest/v1/products?id=eq.{id}&select=name,quantity,unit,expiration_date,users(email),storage_places(name)";
+        Console.WriteLine("=================================");
+        Console.WriteLine("TOKEN USER ID: " + userIdFromToken);
+        Console.WriteLine("PRODUCT ID: " + id);
+        Console.WriteLine("=================================");
 
-            client.DefaultRequestHeaders.Clear();
-            client.DefaultRequestHeaders.Add("apikey", supabaseKey);
-            client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", supabaseKey);
+        var client = _httpFactory.CreateClient();
 
-            var response = await client.GetAsync(url);
+        var supabaseUrl = _config["SUPABASE_URL"];
+        var supabaseKey = _config["SUPABASE_API_KEY"];
 
-            if (!response.IsSuccessStatusCode)
-                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        // =====================================================
+        // 🔥 1. дивимось що в БАЗІ через service key (без RLS)
+        // =====================================================
+        var adminClient = _httpFactory.CreateClient();
+        adminClient.DefaultRequestHeaders.Clear();
+        adminClient.DefaultRequestHeaders.Add("apikey", supabaseKey);
+        adminClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", supabaseKey);
 
-            var json = await response.Content.ReadAsStringAsync();
+        var adminUrl = $"{supabaseUrl}/rest/v1/products?id=eq.{id}&select=user_id";
 
-            // Supabase повертає масив
-            var products = JsonSerializer.Deserialize<List<object>>(json);
+        var adminResp = await adminClient.GetAsync(adminUrl);
+        var adminJson = await adminResp.Content.ReadAsStringAsync();
 
-            if (products == null || products.Count == 0)
-                return NotFound(new { error = "Product not found" });
+        Console.WriteLine("DB RESPONSE (SERVICE ROLE): " + adminJson);
 
-            return Ok(products[0]);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { error = ex.Message });
-        }
+        // =====================================================
+        // 🔥 2. тепер пробуємо як користувач
+        // =====================================================
+        var url = $"{supabaseUrl}/rest/v1/products?id=eq.{id}&select=name,quantity,unit,expiration_date,users(email),storage_places(name)";
+
+        client.DefaultRequestHeaders.Clear();
+        client.DefaultRequestHeaders.Add("apikey", supabaseKey);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync(url);
+        var json = await response.Content.ReadAsStringAsync();
+
+        Console.WriteLine("USER RESPONSE (WITH RLS): " + json);
+        Console.WriteLine("=================================");
+
+        if (!response.IsSuccessStatusCode)
+            return StatusCode((int)response.StatusCode, json);
+
+        var products = JsonSerializer.Deserialize<List<object>>(json);
+
+        if (products == null || products.Count == 0)
+            return NotFound(new { error = "Product not found or not yours" });
+
+        return Ok(products[0]);
     }
 
+
+    //Good
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto dto)
     {
@@ -191,11 +231,14 @@ public class productsController : ControllerBase
     [HttpPatch("{id}")]
     public async Task<IActionResult> UpdateProduct(Guid id, UpdateProductDto dto)
     {
+        var authHeader = Request.Headers["Authorization"].ToString();
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            return Unauthorized(new { error = "Missing Authorization header" });
+
+        var token = authHeader.Substring("Bearer ".Length).Trim();
+
         var supabaseUrl = _config["SUPABASE_URL"];
         var supabaseKey = _config["SUPABASE_API_KEY"];
-
-        if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
-            return StatusCode(500, new { error = "Supabase URL or API key not set" });
 
         try
         {
@@ -206,24 +249,67 @@ public class productsController : ControllerBase
             client.DefaultRequestHeaders.Clear();
             client.DefaultRequestHeaders.Add("apikey", supabaseKey);
             client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", supabaseKey);
+                new AuthenticationHeaderValue("Bearer", token); // 🔥 USER TOKEN
             client.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
             var json = JsonSerializer.Serialize(dto);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await client.PatchAsync(url, content);
 
-            if (!response.IsSuccessStatusCode)
-                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            var resp = await response.Content.ReadAsStringAsync();
 
-            var result = await response.Content.ReadAsStringAsync();
-            return Ok(JsonSerializer.Deserialize<object>(result));
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, resp);
+
+            if (resp == "[]")
+                return NotFound(new { error = "Product not found or not yours" });
+
+            return Ok(JsonSerializer.Deserialize<object>(resp));
         }
         catch (Exception ex)
         {
             return StatusCode(500, new { error = ex.Message });
         }
     }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteProduct(Guid id)
+    {
+        try
+        {
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader))
+                return Unauthorized(new { error = "Missing Authorization header" });
+
+            var token = authHeader.Replace("Bearer ", "");
+
+            var client = _httpFactory.CreateClient();
+            var supabaseUrl = _config["SUPABASE_URL"];
+
+            var deleteUrl = $"{supabaseUrl}/rest/v1/products?id=eq.{id}";
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token); // JWT користувача
+            client.DefaultRequestHeaders.Add("apikey", _config["SUPABASE_API_KEY"]); // REST API key для запиту
+            client.DefaultRequestHeaders.Add("Prefer", "return=representation"); // щоб DELETE повертав JSON
+
+            var deleteResp = await client.DeleteAsync(deleteUrl);
+            var deleteJson = await deleteResp.Content.ReadAsStringAsync();
+
+            // Якщо Supabase повернув порожній рядок
+            if (string.IsNullOrWhiteSpace(deleteJson))
+            {
+                return Ok(new { message = "Deleted successfully or nothing to delete" });
+            }
+
+            return Ok(JsonSerializer.Deserialize<object>(deleteJson));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
 
 }

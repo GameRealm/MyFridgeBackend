@@ -8,7 +8,6 @@ builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
 builder.Services.AddHttpClient();
 
 builder.Services.AddSwaggerGen(c =>
@@ -40,13 +39,13 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["SUPABASE_URL"]; // наприклад https://<project>.supabase.co
+        options.Authority = builder.Configuration["SUPABASE_URL"]; 
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidIssuer = builder.Configuration["SUPABASE_URL"],
 
-            ValidateAudience = false, // якщо треба, постав свій аудієнс
+            ValidateAudience = false, 
             ValidateLifetime = true
         };
     });
