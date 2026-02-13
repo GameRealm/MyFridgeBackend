@@ -7,12 +7,12 @@ using System.Text.Json;
 [ApiController]
 [Authorize]
 [Route("api/users")]
-public class UsersController : ControllerBase
+public class usersController : ControllerBase
 {
     private readonly IHttpClientFactory _httpFactory;
     private readonly IConfiguration _config;
 
-    public UsersController(IHttpClientFactory httpFactory, IConfiguration config)
+    public usersController(IHttpClientFactory httpFactory, IConfiguration config)
     {
         _httpFactory = httpFactory;
         _config = config;

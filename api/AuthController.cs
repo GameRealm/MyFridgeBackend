@@ -8,12 +8,12 @@ namespace myFridge.api;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController : ControllerBase
+public class authController : ControllerBase
 {
     private readonly IHttpClientFactory _httpFactory;
     private readonly IConfiguration _config;
 
-    public AuthController(IHttpClientFactory httpFactory, IConfiguration config)
+    public authController(IHttpClientFactory httpFactory, IConfiguration config)
     {
         _httpFactory = httpFactory;
         _config = config;

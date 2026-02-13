@@ -311,5 +311,89 @@ public class productsController : ControllerBase
         }
     }
 
+    [HttpGet("search")]
+    public async Task<IActionResult> GetProducts([FromQuery] string? search = null)
+    {
+        try
+        {
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader))
+                return Unauthorized(new { error = "Missing Authorization header" });
 
+            var token = authHeader.Replace("Bearer ", "");
+
+            var client = _httpFactory.CreateClient();
+            var supabaseUrl = _config["SUPABASE_URL"];
+
+            // Формуємо URL для запиту
+            var url = $"{supabaseUrl}/rest/v1/products";
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                url += $"?name=ilike.*{search}*";
+            }
+
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token); 
+            client.DefaultRequestHeaders.Add("apikey", _config["SUPABASE_API_KEY"]);
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+
+            var resp = await client.GetAsync(url);
+            var json = await resp.Content.ReadAsStringAsync();
+
+            if (!resp.IsSuccessStatusCode)
+                return StatusCode((int)resp.StatusCode, json);
+
+            if (string.IsNullOrWhiteSpace(json))
+                return Ok(new List<object>());
+
+            return Ok(JsonSerializer.Deserialize<object>(json));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    // GET /products/expiring?days=
+    [HttpGet("expiring")]
+    public async Task<IActionResult> GetExpiringProducts([FromQuery] int days = 3)
+    {
+        try
+        {
+            var authHeader = Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader))
+                return Unauthorized(new { error = "Missing Authorization header" });
+
+            var token = authHeader.Replace("Bearer ", "");
+
+            var client = _httpFactory.CreateClient();
+            var supabaseUrl = _config["SUPABASE_URL"];
+
+            // Формуємо URL для фільтру по даті закінчення
+            // PostgreSQL: expiration_date <= CURRENT_DATE + interval 'days'
+            var url = $"{supabaseUrl}/rest/v1/products?expiration_date=lte.{DateTime.UtcNow.AddDays(days):yyyy-MM-dd}";
+
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token); // JWT користувача
+            client.DefaultRequestHeaders.Add("apikey", _config["SUPABASE_API_KEY"]);
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+
+            var resp = await client.GetAsync(url);
+            var json = await resp.Content.ReadAsStringAsync();
+
+            if (!resp.IsSuccessStatusCode)
+                return StatusCode((int)resp.StatusCode, json);
+
+            if (string.IsNullOrWhiteSpace(json))
+                return Ok(new List<object>());
+
+            return Ok(JsonSerializer.Deserialize<object>(json));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
 }

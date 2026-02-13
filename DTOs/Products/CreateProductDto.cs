@@ -17,6 +17,8 @@ public class CreateProductDto
 
     [JsonPropertyName("storage_place_id")]
     public Guid Storage_Place_Id { get; set; }
+    [JsonPropertyName("comments")]
+    public string? Comment { get; set; }
 
 }
 
