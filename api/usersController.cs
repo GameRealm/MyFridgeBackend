@@ -78,6 +78,22 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpPatch("profile")] 
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateUserDto dto)
+    {
+        try
+        {
+            var token = GetToken();
+
+            var resultJson = await _userService.UpdateUserAsync(token, dto);
+
+            return Ok(JsonSerializer.Deserialize<object>(resultJson));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
     private string GetToken()
     {
         return Request.Headers["Authorization"].ToString().Replace("Bearer ", "");

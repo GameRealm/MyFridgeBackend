@@ -1,10 +1,8 @@
-﻿using System.Net.Http.Headers;
+﻿using myFridge.DTOs.Products;
+using myFridge.Services.Interfaces;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
-using Microsoft.AspNetCore.Http;
-using myFridge.DTOs.Products;
-using myFridge.Services.Interfaces;
 
 namespace myFridge.Services;
 
@@ -153,10 +151,7 @@ public class ProductService : IProductService
     // 🔹 CREATE
     public async Task<ProductDto?> CreateAsync(CreateProductDto dto, string userId)
     {
-        // 1. Валідація Storage Place (як у вашому коді)
-        // Тут можна використати User Token, якщо RLS налаштовано правильно, але залишу Service Key як у прикладі
-        // або краще переробити на звичайний клієнт (безпечніше). 
-        // Використаю тут звичайний клієнт, бо RLS має дозволити бачити свої storage_places.
+       
         PrepareClientHeaders();
 
         var checkUrl = $"{_supabaseUrl}/rest/v1/storage_places?id=eq.{dto.Storage_Place_Id}";
@@ -240,38 +235,6 @@ public class ProductService : IProductService
         }
     }
 
-    // 🔹 SEARCH
-    public async Task<List<ProductDto>> SearchAsync(string searchTerm)
-    {
-        PrepareClientHeaders();
-        var url = $"{_supabaseUrl}/rest/v1/products?select=*";
-
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
-            url += $"&name=ilike.*{searchTerm}*";
-        }
-
-        var response = await _httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<List<ProductDto>>(json, _jsonOptions) ?? new List<ProductDto>();
-    }
-
-    // 🔹 GET EXPIRING
-    public async Task<List<ProductDto>> GetExpiringAsync(int days)
-    {
-        PrepareClientHeaders();
-        var targetDate = DateTime.UtcNow.AddDays(days).ToString("yyyy-MM-dd");
-        var url = $"{_supabaseUrl}/rest/v1/products?expiration_date=lte.{targetDate}";
-
-        var response = await _httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<List<ProductDto>>(json, _jsonOptions) ?? new List<ProductDto>();
-    }
-
     // 🔹 UPDATE FAVORITE
     public async Task<bool> UpdateFavoriteAsync(Guid id, bool isFavorite)
     {
@@ -281,58 +244,5 @@ public class ProductService : IProductService
 
         var response = await _httpClient.PatchAsync(url, content);
         return response.IsSuccessStatusCode;
-    }
-
-    // 🔹 GET FAVORITES
-    public async Task<List<ProductDto>> GetFavoritesAsync(Guid? storageId)
-    {
-        PrepareClientHeaders();
-        var url = $"{_supabaseUrl}/rest/v1/products?is_favorite=eq.true";
-        if (storageId.HasValue) url += $"&storage_place_id=eq.{storageId}";
-
-        var response = await _httpClient.GetAsync(url);
-        if (!response.IsSuccessStatusCode) return new List<ProductDto>();
-
-        var json = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<List<ProductDto>>(json, _jsonOptions) ?? new List<ProductDto>();
-    }
-
-    // 🔹 COMPLEX FILTER (By Expiration Category)
-    public async Task<List<ProductDto>> GetByExpirationCategoryAsync(string userId, string category, Guid? storageId, bool? favorite)
-    {
-        PrepareClientHeaders();
-
-        var url = $"{_supabaseUrl}/rest/v1/products?user_id=eq.{userId}&is_deleted=eq.false";
-
-        if (favorite.HasValue)
-            url += $"&is_favorite=eq.{favorite.Value.ToString().ToLower()}";
-
-        if (storageId.HasValue)
-            url += $"&storage_place_id=eq.{storageId.Value}";
-
-        var today = DateTime.UtcNow.Date;
-
-        switch (category?.ToLower())
-        {
-            case "soon":
-                var soonEnd = today.AddDays(3);
-                url += $"&expiration_date=lte.{soonEnd:yyyy-MM-dd}";
-                break;
-            case "medium":
-                var mediumStart = today.AddDays(4);
-                var mediumEnd = today.AddDays(10);
-                url += $"&expiration_date=gte.{mediumStart:yyyy-MM-dd}&expiration_date=lte.{mediumEnd:yyyy-MM-dd}";
-                break;
-            case "later":
-                var laterStart = today.AddDays(10);
-                url += $"&expiration_date=gt.{laterStart:yyyy-MM-dd}";
-                break;
-        }
-
-        var response = await _httpClient.GetAsync(url);
-        if (!response.IsSuccessStatusCode) return new List<ProductDto>();
-
-        var json = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<List<ProductDto>>(json, _jsonOptions) ?? new List<ProductDto>();
     }
 }

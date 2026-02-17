@@ -6,4 +6,5 @@ public interface IUserService
     Task<string> GetUserProfileAsync(string token, string userId);
     Task<string> CreateProfileAsync(string token, string userId, UserDto dto);
     Task<string> DeleteProfileAsync(string token, string userId);
+    Task<string> UpdateUserAsync(string token, UpdateUserDto dto);
 }

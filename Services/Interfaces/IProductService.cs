@@ -8,9 +8,5 @@ public interface IProductService
     Task<ProductDto?> CreateAsync(CreateProductDto dto, string userId);
     Task<ProductDto?> UpdateAsync(Guid id, UpdateProductDto dto);
     Task<bool> DeleteSmartAsync(Guid id); 
-    Task<List<ProductDto>> SearchAsync(string searchTerm);
-    Task<List<ProductDto>> GetExpiringAsync(int days);
     Task<bool> UpdateFavoriteAsync(Guid id, bool isFavorite);
-    Task<List<ProductDto>> GetFavoritesAsync(Guid? storageId);
-    Task<List<ProductDto>> GetByExpirationCategoryAsync(string userId, string category, Guid? storageId, bool? favorite);
 }

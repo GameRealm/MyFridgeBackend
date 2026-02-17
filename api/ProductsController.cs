@@ -115,4 +115,22 @@ public class ProductsController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
+
+    [HttpPatch("{id}/favorite")]
+    public async Task<IActionResult> SetFavorite(Guid id, [FromBody] bool isFavorite)
+    {
+        try
+        {
+            var success = await _service.UpdateFavoriteAsync(id, isFavorite);
+
+            if (!success)
+                return NotFound(new { error = "Product not found" });
+
+            return Ok(new { message = "Updated successfully", isFavorite });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
 }

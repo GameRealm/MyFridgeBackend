@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using myFridge.DTOs.Users;
-using myFridge.Services.Interfaces; // Переконайтесь, що цей namespace правильний
+using myFridge.Services.Interfaces; 
 
 namespace myFridge.api
 {
@@ -10,7 +10,6 @@ namespace myFridge.api
     {
         private readonly IAuthService _authService;
 
-        // 🔥 ГОЛОВНА ЗМІНА: Ми інжектуємо СЕРВІС, а не HttpClient
         public AuthController(IAuthService authService)
         {
             _authService = authService;
@@ -35,7 +34,6 @@ namespace myFridge.api
         {
             try
             {
-                // Тепер викликається логіка з AuthService, яка має права адміністратора
                 var result = await _authService.RegisterAsync(dto);
                 return Ok(result);
             }
