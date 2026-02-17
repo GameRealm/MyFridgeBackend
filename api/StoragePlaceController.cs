@@ -1,19 +1,20 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using myFridge.Services.Interfaces;
 using System.Text.Json;
 
-namespace myFridge.api;
+namespace myFridge.api.Controllers;
 
+[Authorize] 
 [ApiController]
 [Route("api/[controller]")]
 public class StoragePlaceController : ControllerBase
 {
-    private readonly IHttpClientFactory _httpFactory;
-    private readonly IConfiguration _config;
+    private readonly IStoragePlaceService _storageService;
 
-    public StoragePlaceController(IHttpClientFactory httpFactory, IConfiguration config)
+    public StoragePlaceController(IStoragePlaceService storageService)
     {
-        _httpFactory = httpFactory;
-        _config = config;
+        _storageService = storageService;
     }
 
     [HttpGet("all")]
@@ -21,76 +22,38 @@ public class StoragePlaceController : ControllerBase
     {
         try
         {
-            var authHeader = Request.Headers["Authorization"].ToString();
-            if (string.IsNullOrEmpty(authHeader))
-                return Unauthorized(new { error = "Missing Authorization header" });
+            // Витягуємо токен чисто (без "Bearer ")
+            var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
 
-            var token = authHeader.Replace("Bearer ", "");
+            var resultJson = await _storageService.GetMyStoragePlacesAsync(token);
 
-            var client = _httpFactory.CreateClient();
-            var supabaseUrl = _config["SUPABASE_URL"];
+            // Десеріалізуємо, щоб повернути гарний JSON, а не рядок у лапках
+            var data = JsonSerializer.Deserialize<object>(resultJson);
 
-            var url = $"{supabaseUrl}/rest/v1/storage_places";
-
-            client.DefaultRequestHeaders.Clear();
-            client.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-            client.DefaultRequestHeaders.Add("apikey", _config["SUPABASE_API_KEY"]);
-            client.DefaultRequestHeaders.Add("Accept", "application/json");
-
-            var resp = await client.GetAsync(url);
-            var json = await resp.Content.ReadAsStringAsync();
-
-            if (!resp.IsSuccessStatusCode)
-                return StatusCode((int)resp.StatusCode, json);
-
-            if (string.IsNullOrWhiteSpace(json))
-                return Ok(new List<object>());
-
-            return Ok(JsonSerializer.Deserialize<object>(json));
+            return Ok(data);
         }
         catch (Exception ex)
         {
             return StatusCode(500, new { error = ex.Message });
         }
-
     }
-        [HttpGet ("products")]
-        public async Task<IActionResult> GetProducts([FromQuery] Guid storagePlaceId)
+
+    [HttpGet("products")]
+    public async Task<IActionResult> GetProducts([FromQuery] Guid storagePlaceId)
+    {
+        try
         {
-            try
-            {
-                var authHeader = Request.Headers["Authorization"].ToString();
-                if (string.IsNullOrEmpty(authHeader))
-                    return Unauthorized(new { error = "Missing Authorization header" });
+            var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
 
-                var token = authHeader.Replace("Bearer ", "");
+            var resultJson = await _storageService.GetProductsInStoragePlaceAsync(token, storagePlaceId);
 
-                var client = _httpFactory.CreateClient();
-                var supabaseUrl = _config["SUPABASE_URL"];
+            var data = JsonSerializer.Deserialize<object>(resultJson);
 
-                var url = $"{supabaseUrl}/rest/v1/products?storage_place_id=eq.{storagePlaceId}";
-
-                client.DefaultRequestHeaders.Clear();
-                client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token); // JWT користувача
-                client.DefaultRequestHeaders.Add("apikey", _config["SUPABASE_API_KEY"]);
-                client.DefaultRequestHeaders.Add("Accept", "application/json");
-
-                var resp = await client.GetAsync(url);
-                var json = await resp.Content.ReadAsStringAsync();
-
-                if (!resp.IsSuccessStatusCode)
-                    return StatusCode((int)resp.StatusCode, json);
-
-                if (string.IsNullOrWhiteSpace(json))
-                    return Ok(new List<object>());
-
-                return Ok(JsonSerializer.Deserialize<object>(json));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = ex.Message });
-            }
+            return Ok(data);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
         }
     }
+}

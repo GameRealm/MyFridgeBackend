@@ -19,11 +19,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 
-// Реєстрація ваших сервісів
 try
 {
     builder.Services.AddHttpClient<IAuthService, AuthService>();
     builder.Services.AddHttpClient<IProductService, ProductService>();
+    builder.Services.AddHttpClient<IStoragePlaceService, StoragePlaceService>();
+    builder.Services.AddHttpClient<IUserService, UserService>();
     Console.WriteLine("✅ Services registered successfully.");
 }
 catch (Exception ex)
