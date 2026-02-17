@@ -1,9 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using myFridge.DTOs.Products;
 using myFridge.Services.Interfaces;
 using System.Security.Claims;
 namespace myFridge.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class ProductsController : ControllerBase
@@ -19,15 +21,10 @@ public class ProductsController : ControllerBase
     // Цей метод викликається там, де потрібно фільтрувати дані по юзеру
     private string GetUserId()
     {
-        // Спробуйте знайти або стандартний NameIdentifier (в який перетворюється sub), 
-        // або прямий "sub" (на випадок якщо мапінг вимкнено),
-        // або "user_id" (іноді буває в Supabase)
-        var id = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value
-              ?? User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value
-              ?? User.Claims.FirstOrDefault(c => c.Type == "user_id")?.Value;
-
-        return id ?? throw new UnauthorizedAccessException("User ID (sub) not found in token.");
+        return User.FindFirst("sub")?.Value
+            ?? throw new UnauthorizedAccessException("User ID not found");
     }
+
 
     // 1. GET ALL (Отримати всі продукти користувача)
     [HttpGet] 

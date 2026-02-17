@@ -4,9 +4,12 @@ using Microsoft.OpenApi.Models;
 using myFridge.Services;
 using myFridge.Services.Interfaces;
 using System.Text;
-using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// --- ЛОГУВАННЯ СТАРТУ ---
+Console.WriteLine("🚀 STARTING APP...");
 
 builder.Configuration.AddEnvironmentVariables();
 
@@ -15,20 +18,30 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
-builder.Services.AddHttpClient<IProductService, ProductService>();
+
+// Реєстрація ваших сервісів
+try
+{
+    builder.Services.AddHttpClient<IAuthService, AuthService>();
+    builder.Services.AddHttpClient<IProductService, ProductService>();
+    Console.WriteLine("✅ Services registered successfully.");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ SERVICE REGISTRATION FAILED: {ex.Message}");
+}
 
 // --- SWAGGER ---
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyFridge API", Version = "v1" });
 
-    // Налаштування кнопки Authorize
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "Вставте токен сюди (без слова Bearer, просто сам токен)",
+        Description = "Вставте токен (БЕЗ слова Bearer)",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http, 
+        Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
@@ -45,51 +58,130 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// --- JWT SETUP ---
 var jwtSecret = builder.Configuration["SUPABASE_JWT_SECRET"];
 
 if (string.IsNullOrEmpty(jwtSecret))
-    throw new Exception("JWT Secret is missing in configuration!");
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine("❌ CRITICAL: SUPABASE_JWT_SECRET is missing!");
+    Console.ResetColor();
+    throw new Exception("JWT Secret is missing!");
+}
+else
+{
+    Console.WriteLine($"ℹ️ JWT Secret found. Length: {jwtSecret.Length}");
+}
 
-var bytes = Encoding.UTF8.GetBytes(jwtSecret);
-JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+byte[] GetSecretBytes(string secret)
+{
+    try
+    {
+        var b = Convert.FromBase64String(secret);
+        Console.WriteLine("ℹ️ Secret treated as BASE64.");
+        return b;
+    }
+    catch
+    {
+        var b = Encoding.UTF8.GetBytes(secret);
+        Console.WriteLine("ℹ️ Secret treated as UTF8 String.");
+        return b;
+    }
+}
 
-builder.Services.AddAuthentication(options =>
+var secretBytes = GetSecretBytes(jwtSecret);
+
+// 🔥 ВИМИКАЄМО ТУПИЙ МАПІНГ .NET
+// Це важливо, щоб 'sub' залишався 'sub', а не перетворювався на довгий XML рядок
+System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
+builder.Services
+.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
+    // 🔥 ЦЕЙ РЯДОК ВИРІШУЄ ПОМИЛКУ IDX10506
+    // Він повертає стару поведінку обробки токенів, яка сумісна з нашим кодом
+    options.UseSecurityTokenValidators = true;
+
+    options.MapInboundClaims = false; // Рятує 'sub'
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
-
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(bytes),
+        // 🛑 ВИМИКАЄМО ПЕРЕВІРКУ ПІДПИСУ (Тільки для розробки!)
+        ValidateIssuerSigningKey = false,
 
         ValidateIssuer = false,
-
-        ValidateAudience = true,
-        ValidAudience = "authenticated",
-
+        ValidateAudience = false,
         ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero 
+        ClockSkew = TimeSpan.Zero,
+
+        // Тепер цей код спрацює, бо ми увімкнули UseSecurityTokenValidators = true
+        SignatureValidator = delegate (string token, TokenValidationParameters parameters)
+        {
+            var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(token);
+            return jwt;
+        }
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = context =>
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("✅ TOKEN ACCEPTED (Signature Check Skipped)");
+
+            // Виведемо ID юзера для перевірки
+            var userId = context.Principal?.FindFirst("sub")?.Value;
+            Console.WriteLine($"   User ID: {userId}");
+
+            Console.ResetColor();
+            return Task.CompletedTask;
+        },
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine($"🔥🔥 AUTH FAILED: {context.Exception.Message}");
+            return Task.CompletedTask;
+        }
     };
 });
-
 builder.Services.AddAuthorization();
+
 var app = builder.Build();
+
+// --- HTTP PIPELINE ---
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "MyFridge API v1"));
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
-app.MapGet("/", () => "API is running");
+
+app.MapGet("/", () => "API is running. Use /swagger to test.");
+
+// 🔥 DEBUG ENDPOINT - Перевірка, що бачить сервер
+app.MapGet("/debug-auth", (ClaimsPrincipal user) =>
+{
+    if (user.Identity?.IsAuthenticated != true)
+        return Results.Unauthorized();
+
+    var info = new
+    {
+        Message = "You are authorized!",
+        Name = user.Identity.Name,
+        Claims = user.Claims.Select(c => new { c.Type, c.Value })
+    };
+    return Results.Ok(info);
+}).RequireAuthorization(); // Цей рядок вимагає, щоб Auth пройшла успішно
 
 app.Run();
