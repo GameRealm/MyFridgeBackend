@@ -19,6 +19,7 @@ builder.Services.AddHttpClient<IProductService, ProductService>();
 builder.Services.AddHttpClient<IStoragePlaceService, StoragePlaceService>();
 builder.Services.AddHttpClient<IUserService, UserService>();
 builder.Services.AddHttpClient<IImageAnalysisService, ImageAnalysisService>();
+builder.Services.AddHttpClient<IRecipeGeneratorService, RecipeGeneratorService>();
 
 builder.Services.AddSwaggerGen(c =>
 {
@@ -130,6 +131,16 @@ builder.Services
     };
 });
 builder.Services.AddAuthorization();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
 
 var app = builder.Build();
 
@@ -140,7 +151,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 

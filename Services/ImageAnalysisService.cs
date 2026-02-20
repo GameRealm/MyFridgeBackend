@@ -31,7 +31,7 @@ public class ImageAnalysisService : IImageAnalysisService
             {
                 new
                 {
-                    parts = new object[]
+                   parts = new object[]
                     {
                         new { text = $@"Analyze this image and identify ALL visible grocery products. 
 Extract details for each product into a JSON array.
@@ -39,7 +39,24 @@ Extract details for each product into a JSON array.
 Current Date: {today}
 
 1. NAME: Full product name.
-2. CATEGORY: (Dairy, Meat, Vegetables, Fruits, Drinks, Bakery, Others).
+2. CATEGORY (CRITICAL: You MUST choose ONLY ONE from this exact list):
+   - Молочні продукти
+   - М'ясо
+   - Риба
+   - Овочі
+   - Фрукти
+   - Крупи
+   - Хлібобулочні
+   - Заморожені
+   - Напої
+   - Солодощі
+   - Соуси
+   - Консерви
+   - Горіхи
+   - Яйця
+   - Готові страви
+   - Алкоголь
+   - Інше
 3. EXPIRY DATE Logic:
    - Look for printed date. 
    - If not found, estimate conservatively based on product type.
@@ -60,7 +77,7 @@ Return ONLY a JSON array of objects in this exact format:
     ""Quantity"": 5, 
     ""Volume"": 200, 
     ""Unit"": ""g"", 
-    ""Category"": ""Dairy"" 
+    ""Category"": ""Молочні продукти"" 
   }}
 ]" },
                         new
