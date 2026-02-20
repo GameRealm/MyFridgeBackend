@@ -21,10 +21,15 @@ public class ProductsController : ControllerBase
     // Цей метод викликається там, де потрібно фільтрувати дані по юзеру
     private string GetUserId()
     {
-        return User.FindFirst("sub")?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found");
-    }
+        var userId =
+            User.FindFirst("sub")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
+        if (string.IsNullOrEmpty(userId))
+            throw new UnauthorizedAccessException("User ID not found");
+
+        return userId;
+    }
 
     // 1. GET ALL (Отримати всі продукти користувача)
     [HttpGet] 
