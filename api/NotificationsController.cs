@@ -19,8 +19,11 @@ public class NotificationsController : ControllerBase
     [HttpPost("send-daily-reminders")]
     public async Task<IActionResult> SendDailyReminders()
     {
-
         var providedKey = Request.Headers["X-Cron-Key"].FirstOrDefault();
+
+        // ТИМЧАСОВИЙ ДЕБАГ: виводимо в консоль те, що порівнюємо
+        Console.WriteLine($"Очікуємо: '{_expectedCronKey}'");
+        Console.WriteLine($"Прийшло: '{providedKey}'");
 
         if (providedKey != _expectedCronKey)
         {
@@ -28,7 +31,6 @@ public class NotificationsController : ControllerBase
         }
 
         var sentCount = await _notificationService.SendDailyRemindersAsync();
-
         return Ok(new { message = $"Успішно відправлено сповіщень: {sentCount}" });
     }
 }

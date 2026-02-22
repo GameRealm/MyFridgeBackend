@@ -18,7 +18,7 @@ public class NotificationService : INotificationService
         _httpClient = httpClient;
 
         _supabaseUrl = configuration["SUPABASE_URL"] ?? throw new ArgumentNullException("SUPABASE_URL відсутній у налаштуваннях");
-        _supabaseKey = configuration["SUPABASE_KEY"] ?? throw new ArgumentNullException("SUPABASE_KEY відсутній у налаштуваннях");
+        _supabaseKey = configuration["SUPABASE_API_KEY"] ?? throw new ArgumentNullException("SUPABASE_KEY відсутній у налаштуваннях");
     }
 
     public async Task<int> SendDailyRemindersAsync()
