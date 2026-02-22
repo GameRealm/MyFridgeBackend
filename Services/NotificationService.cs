@@ -69,6 +69,9 @@ public class NotificationService : INotificationService
                 body = $"Завтра прострочиться: {product.Name}. Використайте його швидше!"
             };
 
+            // 👇 ДОДАЙ ОЦЕЙ РЯДОК ДЛЯ ТЕСТУВАННЯ БЕЗ ФРОНТА
+            Console.WriteLine($"\n[СИМУЛЯЦІЯ СПОВІЩЕННЯ] \nКому: {payload.to} \nЗаголовок: {payload.title} \nТекст: {payload.body}\n");
+
             var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
             var expoResponse = await _httpClient.PostAsync(expoApiUrl, content);
 
