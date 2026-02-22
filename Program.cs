@@ -20,7 +20,7 @@ builder.Services.AddHttpClient<IStoragePlaceService, StoragePlaceService>();
 builder.Services.AddHttpClient<IUserService, UserService>();
 builder.Services.AddHttpClient<IImageAnalysisService, ImageAnalysisService>();
 builder.Services.AddHttpClient<IRecipeGeneratorService, RecipeGeneratorService>();
-
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyFridge API", Version = "v1" });
