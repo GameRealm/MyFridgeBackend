@@ -1,8 +1,9 @@
 ﻿using myFridge.DTOs.Users;
+using myFridge.Models;
 using myFridge.Services.Interfaces;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Net.Http.Headers;
 
 namespace myFridge.Services
 {
@@ -111,6 +112,42 @@ namespace myFridge.Services
             }
 
             return content;
+        }
+        public async Task UpdateUserPushTokenAsync(Guid userId, string pushToken)
+        {
+            // Формуємо URL: звертаємося до таблиці users і шукаємо конкретного юзера (id=eq.{userId})
+            // Перевір, щоб _supabaseUrl не закінчувався на слеш
+            var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}";
+
+            // Створюємо JSON тільки з тим полем, яке хочемо оновити
+            var payload = new { push_token = pushToken };
+            var jsonPayload = JsonSerializer.Serialize(payload);
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+            // Для оновлення в Supabase обов'язково використовується метод PATCH
+            var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+            {
+                Content = content
+            };
+
+            // Додаємо секретні ключі Supabase (ті самі, що ти юзав для Notifications)
+            request.Headers.Add("apikey", _supabaseKey);
+            request.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
+            // Бажано додати цей заголовок, щоб Supabase не повертав весь рядок назад
+            request.Headers.Add("Prefer", "return=minimal");
+
+            var response = await _httpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[ПОМИЛКА SUPABASE] Не вдалося оновити токен: {errorBody}");
+                // Можеш кинути Exception, якщо хочеш, щоб контролер повернув 500
+            }
+            else
+            {
+                Console.WriteLine($"[УСПІХ] Токен для юзера {userId} успішно збережено в базі!");
+            }
         }
     }
 }

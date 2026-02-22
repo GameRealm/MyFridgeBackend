@@ -5,7 +5,6 @@ using myFridge.Services.Interfaces;
 using System.Text.Json;
 
 namespace myFridge.api.Controllers;
-// On the future
 [ApiController]
 [Authorize]
 [Route("api/users")]
@@ -97,5 +96,23 @@ public class UsersController : ControllerBase
     private string GetToken()
     {
         return Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
+    }
+
+    [HttpPost("update-push-token")]
+    public async Task<IActionResult> UpdatePushToken([FromBody] PushTokenDto request)
+    {
+        // 1. Перевіряємо, чи не прийшов пустий Guid або пустий токен
+        if (request.UserId == Guid.Empty || string.IsNullOrWhiteSpace(request.PushToken))
+        {
+            return BadRequest(new { message = "UserId та PushToken є обов'язковими." });
+        }
+
+        // 2. Передаємо в сервіс
+        // (Якщо твій метод у сервісі приймає Guid, передаємо як є. 
+        // Якщо сервіс очікує string, додай .ToString(): request.UserId.ToString())
+        await _userService.UpdateUserPushTokenAsync(request.UserId, request.PushToken);
+
+        // 3. Кажемо мобілці "Все супер!"
+        return Ok(new { message = "Push-токен успішно оновлено!" });
     }
 }
