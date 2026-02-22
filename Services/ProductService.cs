@@ -1,8 +1,10 @@
 ﻿using myFridge.DTOs.Products;
 using myFridge.Services.Interfaces;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace myFridge.Services;
 
@@ -11,6 +13,7 @@ public class ProductService : IProductService
     private readonly HttpClient _httpClient;
     private readonly string? _supabaseUrl;
     private readonly string? _supabaseKey;
+    private readonly string? _serviceRoleKey;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -20,7 +23,7 @@ public class ProductService : IProductService
         _httpContextAccessor = httpContextAccessor;
         _supabaseUrl = config["SUPABASE_URL"];
         _supabaseKey = config["SUPABASE_API_KEY"];
-
+        _serviceRoleKey = config["SUPABASE_SERVICE_ROLE_KEY"];
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -245,4 +248,38 @@ public class ProductService : IProductService
         var response = await _httpClient.PatchAsync(url, content);
         return response.IsSuccessStatusCode;
     }
+
+public async Task CreateProductsBatchAsync(List<CreateProductDto> products)
+{
+    var url = $"{_supabaseUrl}/rest/v1/products";
+
+    // 🔥 ДОДАЄМО НАЛАШТУВАННЯ: ігнорувати поля зі значенням null
+    var jsonOptions = new JsonSerializerOptions
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    // 2. Серіалізуємо масив продуктів у JSON з нашими налаштуваннями
+    var jsonPayload = JsonSerializer.Serialize(products, jsonOptions);
+    var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+    var request = new HttpRequestMessage(HttpMethod.Post, url)
+    {
+        Content = content
+    };
+
+    request.Headers.Add("apikey", _serviceRoleKey);
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _serviceRoleKey);
+
+    // Чудова оптимізація!
+    request.Headers.Add("Prefer", "return=minimal");
+
+    var response = await _httpClient.SendAsync(request);
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var errorBody = await response.Content.ReadAsStringAsync();
+        throw new Exception($"Помилка збереження списку продуктів ({response.StatusCode}): {errorBody}");
+    }
+}
 }

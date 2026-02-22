@@ -20,5 +20,8 @@ public class CreateProductDto
     [JsonPropertyName("comments")]
     public string? Comment { get; set; }
 
+    [JsonPropertyName("user_id")]
+    public Guid UserId { get; set; }
+
 }
 

@@ -118,7 +118,6 @@ public class AuthService : IAuthService
         var checkResp = await _client.SendAsync(checkRequest);
         var checkJson = await checkResp.Content.ReadAsStringAsync();
 
-        // Якщо повернувся не порожній масив, значить юзер вже є -> виходимо
         if (checkJson != "[]" && !string.IsNullOrWhiteSpace(checkJson))
         {
             return;
@@ -132,7 +131,6 @@ public class AuthService : IAuthService
             created_at = DateTime.UtcNow
         };
 
-        // 3. Відправляємо запит на створення
         var postRequest = CreateRequest(HttpMethod.Post, $"{_supabaseUrl}/rest/v1/users", userBody);
         var response = await _client.SendAsync(postRequest);
 
@@ -142,7 +140,7 @@ public class AuthService : IAuthService
         // 4. ЯКЩО ПОМИЛКА - КИДАЄМО EXCEPTION НАГОРУ
         if (!response.IsSuccessStatusCode)
         {
-            // Це повідомлення ви побачите в Swagger/Postman
+
             throw new Exception($"DB SYNC ERROR ({response.StatusCode}): {errorBody}");
         }
     }
@@ -167,12 +165,10 @@ public class AuthService : IAuthService
         }
     }
 
-    // Я прибрав параметр apiKey, бо тепер ми завжди використовуємо _serviceRoleKey
     private HttpRequestMessage CreateRequest(HttpMethod method, string url, object? body = null)
     {
         var request = new HttpRequestMessage(method, url);
 
-        // Service Role Key ставиться і в apikey, і в Authorization
         request.Headers.Add("apikey", _serviceRoleKey);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _serviceRoleKey);
 

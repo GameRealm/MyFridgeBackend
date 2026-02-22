@@ -9,4 +9,5 @@ public interface IProductService
     Task<ProductDto?> UpdateAsync(Guid id, UpdateProductDto dto);
     Task<bool> DeleteSmartAsync(Guid id); 
     Task<bool> UpdateFavoriteAsync(Guid id, bool isFavorite);
+    Task CreateProductsBatchAsync(List<CreateProductDto> products);
 }

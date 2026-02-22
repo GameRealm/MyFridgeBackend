@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using myFridge.DTOs.AIPhoto;
 using myFridge.DTOs.Products;
+using myFridge.Services;
 using myFridge.Services.Interfaces;
 using System.Security.Claims;
 namespace myFridge.Api.Controllers;
@@ -137,5 +139,42 @@ public class ProductsController : ControllerBase
         {
             return StatusCode(500, new { error = ex.Message });
         }
+    }
+
+    [HttpPost("batch")]
+    public async Task<IActionResult> CreateProductsBatch([FromBody] List<CreateProductDto> productsDto)
+    {
+        if (productsDto == null || !productsDto.Any())
+        {
+            return BadRequest(new { message = "Масив продуктів порожній." });
+        }
+
+        // 1. Витягуємо ID користувача з токена
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                           ?? User.FindFirst("sub")?.Value;
+
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized(new { message = "Не вдалося розпізнати користувача з токена." });
+        }
+
+        // 2. ПЕРЕКЛАДАЄМО ScannedProductDto у CreateProductDto
+        var productsToCreate = productsDto.Select(p => new CreateProductDto
+        {
+            Name = p.Name,
+            // 🔥 Тут спрацює наша розумна логіка з вибором між Quantity та Volume
+            Quantity = p.Quantity,
+            Unit = p.Unit,
+            // 🔥 Тут спрацює безпечний парсинг рядка в дату
+            Expiration_Date = p.Expiration_Date,
+            Storage_Place_Id = p.Storage_Place_Id,
+            Comment = p.Comment,
+            UserId = userId // Присвоюємо ID з токена
+        }).ToList();
+
+        // 3. Відправляємо ПРАВИЛЬНИЙ масив у сервіс
+        await _service.CreateProductsBatchAsync(productsToCreate);
+
+        return Ok(new { message = $"Успішно збережено {productsToCreate.Count} продуктів!" });
     }
 }
