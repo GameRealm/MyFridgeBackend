@@ -23,54 +23,44 @@ public class NotificationService : INotificationService
 
     public async Task<int> SendDailyRemindersAsync()
     {
-        // 1. Визначаємо завтрашню дату у форматі YYYY-MM-DD
+        // 1. Отримуємо продукти, що закінчуються завтра
         var tomorrowString = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
-
-        // 2. Формуємо URL для Supabase.
-        // eq.{tomorrowString} - фільтр по даті
-        // select=name,users(push_token) - беремо назву продукту та підтягуємо токен користувача
         var url = $"{_supabaseUrl}/rest/v1/products?expiration_date=eq.{tomorrowString}&select=name,users(push_token)";
 
-        // Налаштовуємо заголовки для Supabase
         var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
         requestMessage.Headers.Add("apikey", _supabaseKey);
         requestMessage.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
 
-        // 3. Робимо запит до БД
         var response = await _httpClient.SendAsync(requestMessage);
-        if (!response.IsSuccessStatusCode)
-        {
-            Console.WriteLine($"Помилка отримання продуктів: {response.StatusCode}");
-            return 0;
-        }
+        if (!response.IsSuccessStatusCode) return 0;
 
         var json = await response.Content.ReadAsStringAsync();
-
-        // Десеріалізуємо відповідь
         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var expiringProducts = JsonSerializer.Deserialize<List<NotificationProductDto>>(json, jsonOptions);
 
         if (expiringProducts == null || !expiringProducts.Any()) return 0;
 
-        // 4. Відправка повідомлень через Expo
+        // 
+        // 2. Групуємо продукти за користувачами (групуємо за push_token)
+        var groupedNotifications = expiringProducts
+            .Where(p => !string.IsNullOrEmpty(p.User?.PushToken))
+            .GroupBy(p => p.User!.PushToken);
+
         var expoApiUrl = "https://exp.host/--/api/v2/push/send";
         int sentMessagesCount = 0;
 
-        foreach (var product in expiringProducts)
+        // 3. Відправляємо одне сповіщення на одного користувача
+        foreach (var group in groupedNotifications)
         {
-            // Перевіряємо, чи є у користувача токен взагалі
-            var pushToken = product.User?.PushToken;
-            if (string.IsNullOrEmpty(pushToken)) continue;
+            var token = group.Key;
+            var productNames = string.Join(", ", group.Select(p => p.Name));
 
             var payload = new
             {
-                to = pushToken,
+                to = token,
                 title = "⏳ Термін придатності спливає!",
-                body = $"Завтра прострочиться: {product.Name}. Використайте його швидше!"
+                body = $"Завтра прострочиться: {productNames}. Використайте їх швидше!"
             };
-
-            // 👇 ДОДАЙ ОЦЕЙ РЯДОК ДЛЯ ТЕСТУВАННЯ БЕЗ ФРОНТА
-            Console.WriteLine($"\n[СИМУЛЯЦІЯ СПОВІЩЕННЯ] \nКому: {payload.to} \nЗаголовок: {payload.title} \nТекст: {payload.body}\n");
 
             var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
             var expoResponse = await _httpClient.PostAsync(expoApiUrl, content);
@@ -81,7 +71,8 @@ public class NotificationService : INotificationService
             }
             else
             {
-                Console.WriteLine($"Помилка відправки для {pushToken}: {expoResponse.StatusCode}");
+                var error = await expoResponse.Content.ReadAsStringAsync();
+                Console.WriteLine($"Помилка відправки в Expo для {token}: {error}");
             }
         }
 

@@ -10,3 +10,8 @@ public class PushTokenDto
     [JsonPropertyName("push_token")]
     public string? PushToken { get; set; }
 }
+
+public class UpdateTokenDto
+{
+    public string? Token { get; set; }
+}
