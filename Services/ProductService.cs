@@ -253,13 +253,11 @@ public async Task CreateProductsBatchAsync(List<CreateProductDto> products)
 {
     var url = $"{_supabaseUrl}/rest/v1/products";
 
-    // 🔥 ДОДАЄМО НАЛАШТУВАННЯ: ігнорувати поля зі значенням null
     var jsonOptions = new JsonSerializerOptions
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    // 2. Серіалізуємо масив продуктів у JSON з нашими налаштуваннями
     var jsonPayload = JsonSerializer.Serialize(products, jsonOptions);
     var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
@@ -268,10 +266,9 @@ public async Task CreateProductsBatchAsync(List<CreateProductDto> products)
         Content = content
     };
 
-    request.Headers.Add("apikey", _serviceRoleKey);
-    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _serviceRoleKey);
+    request.Headers.Add("apikey", _supabaseKey);
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
 
-    // Чудова оптимізація!
     request.Headers.Add("Prefer", "return=minimal");
 
     var response = await _httpClient.SendAsync(request);
