@@ -161,10 +161,9 @@ public class ProductsController : ControllerBase
         var productsToCreate = productsDto.Select(p => new CreateProductDto
         {
             Name = p.Name,
-            // 🔥 Тут спрацює наша розумна логіка з вибором між Quantity та Volume
+           
             Quantity = p.Quantity,
             Unit = p.Unit,
-            // 🔥 Тут спрацює безпечний парсинг рядка в дату
             Expiration_Date = p.Expiration_Date,
             Storage_Place_Id = p.Storage_Place_Id,
             Comment = p.Comment,

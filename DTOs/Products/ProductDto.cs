@@ -18,4 +18,6 @@ public class ProductDto
     public UserDto? User { get; set; }
     [JsonPropertyName("storage_places")]
     public StorageDto? StoragePlace { get; set; }
+    [JsonPropertyName("created_at")]
+    public DateTime CreatedAt { get; set; }
 }
