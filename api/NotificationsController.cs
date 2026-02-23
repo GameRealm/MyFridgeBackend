@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using myFridge.Services.Interfaces;
+namespace myFridge.Controllers; 
 
-namespace myFridge.Controllers; // Переконайся, що тут твій правильний namespace
-
+[AllowAnonymous]
 [ApiController]
 [Route("api/[controller]")]
 public class NotificationsController : ControllerBase
@@ -17,7 +18,8 @@ public class NotificationsController : ControllerBase
         _expectedCronKey = config["CRON_SECRET_KEY"]
             ?? throw new ArgumentNullException("CRON_SECRET_KEY відсутній у налаштуваннях");
     }
-    [AllowAnonymous]
+
+   
     [HttpPost("send-daily-reminders")]
     public async Task<IActionResult> SendDailyReminders([FromHeader(Name = "X-Cron-Key")] string? providedKey)
     {
