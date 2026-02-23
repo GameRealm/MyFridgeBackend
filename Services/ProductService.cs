@@ -67,7 +67,7 @@ public class ProductService : IProductService
         // 1. Базовий URL з обов'язковими фільтрами
         var urlBuilder = new StringBuilder();
         urlBuilder.Append($"{_supabaseUrl}/rest/v1/products?");
-        urlBuilder.Append("select=*");
+        urlBuilder.Append("select=*,storage_places(*),users(*)");
         urlBuilder.Append($"&user_id=eq.{userId}");
         urlBuilder.Append("&is_deleted=eq.false");
 
