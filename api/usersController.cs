@@ -12,10 +12,7 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
 
-    public UsersController(IUserService userService)
-    {
-        _userService = userService;
-    }
+    public UsersController(IUserService userService) => _userService = userService;   
 
     [HttpGet("me")]
     public async Task<IActionResult> GetMe()
@@ -93,28 +90,19 @@ public class UsersController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
-    private string GetToken()
-    {
-        return Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-    }
+    private string GetToken() => Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
 
     [HttpPost("update-push-token")]
     public async Task<IActionResult> UpdatePushToken([FromBody] PushTokenDto request)
     {
-        // 1. Перевіряємо, чи не прийшов пустий Guid або пустий токен
+
         if (request.UserId == Guid.Empty || string.IsNullOrWhiteSpace(request.PushToken))
         {
             return BadRequest(new { message = "UserId та PushToken є обов'язковими." });
         }
 
-        // 2. Передаємо в сервіс
-        // (Якщо твій метод у сервісі приймає Guid, передаємо як є. 
-        // Якщо сервіс очікує string, додай .ToString(): request.UserId.ToString())
         await _userService.UpdateUserPushTokenAsync(request.UserId, request.PushToken);
 
-        // 3. Кажемо мобілці "Все супер!"
         return Ok(new { message = "Push-токен успішно оновлено!" });
     }
-
-
 }

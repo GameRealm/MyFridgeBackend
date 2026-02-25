@@ -14,11 +14,9 @@ public class NotificationsController : ControllerBase
     public NotificationsController(INotificationService notificationService, IConfiguration config)
     {
         _notificationService = notificationService;
-
-        _expectedCronKey = config["CRON_SECRET_KEY"]
-            ?? throw new ArgumentNullException("CRON_SECRET_KEY відсутній у налаштуваннях");
+        _expectedCronKey = config["CRON_SECRET_KEY"] ?? throw new ArgumentNullException("CRON_SECRET_KEY відсутній у налаштуваннях");
     }
-    [AllowAnonymous]
+
     [HttpPost("send-daily-reminders")]
     public async Task<IActionResult> SendDailyReminders([FromHeader(Name = "X-Cron-Key")] string? providedKey)
     {

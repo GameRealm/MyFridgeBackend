@@ -2,11 +2,11 @@
 
 public class ProductFilterDto
 {
-    public string? SearchTerm { get; set; }       // Пошук по назві
-    public bool? IsFavorite { get; set; }         // Тільки улюблені?
-    public Guid? StorageId { get; set; }          // Конкретне місце
-    public int? ExpiringInDays { get; set; }      // Скільки днів до псування
-    public string? ExpirationCategory { get; set; } // "soon", "medium", "later"
-    public string SortBy { get; set; } = "created_at"; // Сортування
-    public bool SortDescending { get; set; } = false;  // Напрямок сортування
+    public string? SearchTerm { get; set; }      
+    public bool? IsFavorite { get; set; }        
+    public Guid? StorageId { get; set; }          
+    public int? ExpiringInDays { get; set; }      
+    public string? ExpirationCategory { get; set; } 
+    public string SortBy { get; set; } = "created_at"; 
+    public bool SortDescending { get; set; } = false;  
 }

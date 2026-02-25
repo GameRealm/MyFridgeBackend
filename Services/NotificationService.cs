@@ -12,7 +12,6 @@ public class NotificationService : INotificationService
     private readonly string _supabaseUrl;
     private readonly string _supabaseKey;
 
-    // Інжектимо IConfiguration, щоб дістати URL та Key для Supabase з appsettings.json
     public NotificationService(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
@@ -23,7 +22,6 @@ public class NotificationService : INotificationService
 
     public async Task<int> SendDailyRemindersAsync()
     {
-        // 1. Отримуємо продукти, що закінчуються завтра
         var tomorrowString = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
         var url = $"{_supabaseUrl}/rest/v1/products?expiration_date=eq.{tomorrowString}&select=name,users(push_token)";
 
@@ -40,8 +38,6 @@ public class NotificationService : INotificationService
 
         if (expiringProducts == null || !expiringProducts.Any()) return 0;
 
-        // 
-        // 2. Групуємо продукти за користувачами (групуємо за push_token)
         var groupedNotifications = expiringProducts
             .Where(p => !string.IsNullOrEmpty(p.User?.PushToken))
             .GroupBy(p => p.User!.PushToken);
@@ -49,7 +45,6 @@ public class NotificationService : INotificationService
         var expoApiUrl = "https://exp.host/--/api/v2/push/send";
         int sentMessagesCount = 0;
 
-        // 3. Відправляємо одне сповіщення на одного користувача
         foreach (var group in groupedNotifications)
         {
             var token = group.Key;
@@ -75,7 +70,6 @@ public class NotificationService : INotificationService
                 Console.WriteLine($"Помилка відправки в Expo для {token}: {error}");
             }
         }
-
         return sentMessagesCount;
     }
 }

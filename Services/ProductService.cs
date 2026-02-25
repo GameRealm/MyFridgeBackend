@@ -31,7 +31,6 @@ public class ProductService : IProductService
         };
     }
 
-    // 🛠️ HELPER: Налаштування клієнта для кожного запиту
     private void PrepareClientHeaders(bool useServiceKey = false)
     {
         _httpClient.DefaultRequestHeaders.Clear();
@@ -40,13 +39,11 @@ public class ProductService : IProductService
 
         if (useServiceKey)
         {
-            // Використовуємо Service Key (обхід RLS)
             _httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", _supabaseKey);
         }
         else
         {
-            // Використовуємо токен користувача з поточного запиту
             var context = _httpContextAccessor.HttpContext;
             if (context != null && context.Request.Headers.ContainsKey("Authorization"))
             {
@@ -57,21 +54,15 @@ public class ProductService : IProductService
         }
     }
 
-    // 🔹 GET ALL
-    // Repositories/ProductRepository.cs
-
     public async Task<List<ProductDto>> GetProductsAsync(string userId, ProductFilterDto filter)
     {
         PrepareClientHeaders();
-
-        // 1. Базовий URL з обов'язковими фільтрами
         var urlBuilder = new StringBuilder();
         urlBuilder.Append($"{_supabaseUrl}/rest/v1/products?");
         urlBuilder.Append("select=*,storage_places(*),users(*)");
         urlBuilder.Append($"&user_id=eq.{userId}");
         urlBuilder.Append("&is_deleted=eq.false");
 
-        // 2. Динамічне додавання фільтрів
 
         // Пошук
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
@@ -91,7 +82,7 @@ public class ProductService : IProductService
             urlBuilder.Append($"&storage_place_id=eq.{filter.StorageId}");
         }
 
-        // Логіка дат (Expiring Days або Category)
+        // Логіка дат 
         var today = DateTime.UtcNow.Date;
 
         if (filter.ExpiringInDays.HasValue)
@@ -121,13 +112,11 @@ public class ProductService : IProductService
 
         // 3. Сортування
         var sortOrder = filter.SortDescending ? "desc" : "asc";
-        // Перевірка на валідні поля сортування, щоб уникнути SQL Injection (хоча Supabase захищений)
         var allowedSorts = new[] { "name", "created_at", "expiration_date", "quantity" };
         var sortBy = allowedSorts.Contains(filter.SortBy) ? filter.SortBy : "created_at";
 
         urlBuilder.Append($"&order={sortBy}.{sortOrder}");
 
-        // 4. Виконуємо запит
         var response = await _httpClient.GetAsync(urlBuilder.ToString());
         response.EnsureSuccessStatusCode();
 
@@ -135,7 +124,6 @@ public class ProductService : IProductService
         return JsonSerializer.Deserialize<List<ProductDto>>(json, _jsonOptions) ?? new List<ProductDto>();
     }
 
-    // 🔹 GET BY ID
     public async Task<ProductDto?> GetByIdAsync(Guid id)
     {
         PrepareClientHeaders();
@@ -151,7 +139,6 @@ public class ProductService : IProductService
         return products?.FirstOrDefault();
     }
 
-    // 🔹 CREATE
     public async Task<ProductDto?> CreateAsync(CreateProductDto dto, string userId)
     {
        
@@ -164,7 +151,6 @@ public class ProductService : IProductService
         if (!checkResp.IsSuccessStatusCode || checkJson == "[]")
             throw new Exception("Invalid storage_place_id or access denied");
 
-        // 2. Створення
         var body = new
         {
             name = dto.Name,
@@ -186,7 +172,6 @@ public class ProductService : IProductService
         return createdList?.FirstOrDefault();
     }
 
-    // 🔹 UPDATE
     public async Task<ProductDto?> UpdateAsync(Guid id, UpdateProductDto dto)
     {
         PrepareClientHeaders();
@@ -203,12 +188,10 @@ public class ProductService : IProductService
         return updatedList?.FirstOrDefault();
     }
 
-    // 🔹 DELETE (SMART LOGIC)
     public async Task<bool> DeleteSmartAsync(Guid id)
     {
         PrepareClientHeaders();
 
-        // 1. Перевірка чи улюблений
         var checkUrl = $"{_supabaseUrl}/rest/v1/products?id=eq.{id}&select=is_favorite";
         var checkResp = await _httpClient.GetAsync(checkUrl);
 
@@ -216,14 +199,12 @@ public class ProductService : IProductService
 
         var checkJson = await checkResp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(checkJson);
-        if (doc.RootElement.GetArrayLength() == 0) return false; // Не знайдено
+        if (doc.RootElement.GetArrayLength() == 0) return false; 
 
         bool isFavorite = doc.RootElement[0].GetProperty("is_favorite").GetBoolean();
 
-        // 2. Логіка видалення
         if (isFavorite)
         {
-            // Soft Delete
             var updateUrl = $"{_supabaseUrl}/rest/v1/products?id=eq.{id}";
             var content = new StringContent(JsonSerializer.Serialize(new { is_deleted = true }), Encoding.UTF8, "application/json");
             var patchResp = await _httpClient.PatchAsync(updateUrl, content);
@@ -231,14 +212,12 @@ public class ProductService : IProductService
         }
         else
         {
-            // Hard Delete
             var deleteUrl = $"{_supabaseUrl}/rest/v1/products?id=eq.{id}";
             var deleteResp = await _httpClient.DeleteAsync(deleteUrl);
             return deleteResp.IsSuccessStatusCode;
         }
     }
 
-    // 🔹 UPDATE FAVORITE
     public async Task<bool> UpdateFavoriteAsync(Guid id, bool isFavorite)
     {
         PrepareClientHeaders();
@@ -249,34 +228,34 @@ public class ProductService : IProductService
         return response.IsSuccessStatusCode;
     }
 
-public async Task CreateProductsBatchAsync(List<CreateProductDto> products)
-{
-    var url = $"{_supabaseUrl}/rest/v1/products";
-
-    var jsonOptions = new JsonSerializerOptions
+    public async Task CreateProductsBatchAsync(List<CreateProductDto> products)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
+        var url = $"{_supabaseUrl}/rest/v1/products";
 
-    var jsonPayload = JsonSerializer.Serialize(products, jsonOptions);
-    var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        var jsonOptions = new JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
 
-    var request = new HttpRequestMessage(HttpMethod.Post, url)
-    {
-        Content = content
-    };
+        var jsonPayload = JsonSerializer.Serialize(products, jsonOptions);
+        var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-    request.Headers.Add("apikey", _supabaseKey);
-    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = content
+        };
 
-    request.Headers.Add("Prefer", "return=minimal");
+        request.Headers.Add("apikey", _supabaseKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
 
-    var response = await _httpClient.SendAsync(request);
+        request.Headers.Add("Prefer", "return=minimal");
 
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorBody = await response.Content.ReadAsStringAsync();
-        throw new Exception($"Помилка збереження списку продуктів ({response.StatusCode}): {errorBody}");
+        var response = await _httpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Помилка збереження списку продуктів ({response.StatusCode}): {errorBody}");
+        }
     }
-}
 }

@@ -1,153 +1,135 @@
 ﻿using myFridge.DTOs.Users;
-using myFridge.Models;
 using myFridge.Services.Interfaces;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+namespace myFridge.Services;
 
-namespace myFridge.Services
+public class UserService : IUserService
 {
-    public class UserService : IUserService
+    private readonly HttpClient _httpClient;
+    private readonly string? _supabaseUrl;
+    private readonly string? _supabaseKey;
+
+    public UserService(HttpClient httpClient, IConfiguration config)
     {
-        private readonly HttpClient _httpClient;
-        private readonly string? _supabaseUrl;
-        private readonly string? _supabaseKey;
+        _httpClient = httpClient;
+        _supabaseUrl = config["SUPABASE_URL"];
+        _supabaseKey = config["SUPABASE_API_KEY"];
+    }
 
-        public UserService(HttpClient httpClient, IConfiguration config)
+    public async Task<string> GetUserProfileAsync(string token, string userId)
+    {
+        var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}&select=id,email,created_at";
+        return await SendRequestAsync(HttpMethod.Get, url, token);
+    }
+
+    public async Task<string> CreateProfileAsync(string token, string userId, UserDto dto)
+    {
+        var url = $"{_supabaseUrl}/rest/v1/users";
+
+        var body = new
         {
-            _httpClient = httpClient;
-            _supabaseUrl = config["SUPABASE_URL"];
-            _supabaseKey = config["SUPABASE_API_KEY"];
-        }
+            id = userId,
+            email = dto.Email
+        };
 
-        public async Task<string> GetUserProfileAsync(string token, string userId)
+        return await SendRequestAsync(HttpMethod.Post, url, token, body);
+    }
+
+    public async Task<string> DeleteProfileAsync(string token, string userId)
+    {
+        var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}";
+        return await SendRequestAsync(HttpMethod.Delete, url, token);
+    }
+
+    private async Task<string> SendRequestAsync(HttpMethod method, string url, string token, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("apikey", _supabaseKey);
+        request.Headers.Add("Prefer", "return=representation");
+
+        if (body != null)
         {
-            var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}&select=id,email,created_at";
-            return await SendRequestAsync(HttpMethod.Get, url, token);
-        }
-
-        public async Task<string> CreateProfileAsync(string token, string userId, UserDto dto)
-        {
-            var url = $"{_supabaseUrl}/rest/v1/users";
-
-            var body = new
-            {
-                id = userId,
-                email = dto.Email
-                // Тут можна додати Name, Avatar тощо в майбутньому
-            };
-
-            return await SendRequestAsync(HttpMethod.Post, url, token, body);
-        }
-
-        public async Task<string> DeleteProfileAsync(string token, string userId)
-        {
-            var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}";
-            return await SendRequestAsync(HttpMethod.Delete, url, token);
-        }
-
-        // Універсальний метод для відправки запитів
-        private async Task<string> SendRequestAsync(HttpMethod method, string url, string token, object? body = null)
-        {
-            var request = new HttpRequestMessage(method, url);
-
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("apikey", _supabaseKey);
-            request.Headers.Add("Prefer", "return=representation"); // Щоб Supabase повертав змінені дані
-
-            if (body != null)
-            {
-                var json = JsonSerializer.Serialize(body);
-                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-            }
-
-            var response = await _httpClient.SendAsync(request);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Supabase Error ({response.StatusCode}): {content}");
-            }
-
-            return content;
-        }
-
-
-        public async Task<string> UpdateUserAsync(string token, UpdateUserDto dto)
-        {
-            // 1. Формуємо URL для Supabase Auth
-            var url = $"{_supabaseUrl}/auth/v1/user";
-
-            // 2. Створюємо тіло запиту динамічно (щоб не слати null поля)
-            var payload = new Dictionary<string, string>();
-
-            if (!string.IsNullOrEmpty(dto.Email))
-            {
-                payload.Add("email", dto.Email);
-            }
-
-            if (!string.IsNullOrEmpty(dto.Password))
-            {
-                payload.Add("password", dto.Password);
-            }
-
-            // Якщо нічого змінювати - просто повертаємо ОК або кидаємо помилку
-            if (payload.Count == 0) return "{}";
-
-            // 3. Налаштовуємо запит (PUT для оновлення Auth)
-            var request = new HttpRequestMessage(HttpMethod.Put, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("apikey", _supabaseKey);
-
-            var json = JsonSerializer.Serialize(payload);
+            var json = JsonSerializer.Serialize(body);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            // 4. Відправляємо
-            var response = await _httpClient.SendAsync(request);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Supabase Auth Error ({response.StatusCode}): {content}");
-            }
-
-            return content;
         }
-        public async Task UpdateUserPushTokenAsync(Guid userId, string pushToken)
+
+        var response = await _httpClient.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
         {
-            // Формуємо URL: звертаємося до таблиці users і шукаємо конкретного юзера (id=eq.{userId})
-            // Перевір, щоб _supabaseUrl не закінчувався на слеш
-            var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}";
+            throw new Exception($"Supabase Error ({response.StatusCode}): {content}");
+        }
 
-            // Створюємо JSON тільки з тим полем, яке хочемо оновити
-            var payload = new { push_token = pushToken };
-            var jsonPayload = JsonSerializer.Serialize(payload);
-            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        return content;
+    }
 
-            // Для оновлення в Supabase обов'язково використовується метод PATCH
-            var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
-            {
-                Content = content
-            };
+    public async Task<string> UpdateUserAsync(string token, UpdateUserDto dto)
+    {
+        var url = $"{_supabaseUrl}/auth/v1/user";
+        var payload = new Dictionary<string, string>();
 
-            // Додаємо секретні ключі Supabase (ті самі, що ти юзав для Notifications)
-            request.Headers.Add("apikey", _supabaseKey);
-            request.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
-            // Бажано додати цей заголовок, щоб Supabase не повертав весь рядок назад
-            request.Headers.Add("Prefer", "return=minimal");
+        if (!string.IsNullOrEmpty(dto.Email))
+        {
+            payload.Add("email", dto.Email);
+        }
 
-            var response = await _httpClient.SendAsync(request);
+        if (!string.IsNullOrEmpty(dto.Password))
+        {
+            payload.Add("password", dto.Password);
+        }
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorBody = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"[ПОМИЛКА SUPABASE] Не вдалося оновити токен: {errorBody}");
-                // Можеш кинути Exception, якщо хочеш, щоб контролер повернув 500
-            }
-            else
-            {
-                Console.WriteLine($"[УСПІХ] Токен для юзера {userId} успішно збережено в базі!");
-            }
+        if (payload.Count == 0) return "{}";
+
+        var request = new HttpRequestMessage(HttpMethod.Put, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("apikey", _supabaseKey);
+
+        var json = JsonSerializer.Serialize(payload);
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"Supabase Auth Error ({response.StatusCode}): {content}");
+        }
+
+        return content;
+    }
+    public async Task UpdateUserPushTokenAsync(Guid userId, string pushToken)
+    {
+
+        var url = $"{_supabaseUrl}/rest/v1/users?id=eq.{userId}";
+
+        var payload = new { push_token = pushToken };
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+        var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+        {
+            Content = content
+        };
+
+        request.Headers.Add("apikey", _supabaseKey);
+        request.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
+        request.Headers.Add("Prefer", "return=minimal");
+
+        var response = await _httpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"[ПОМИЛКА SUPABASE] Не вдалося оновити токен: {errorBody}");
+        }
+        else
+        {
+            Console.WriteLine($"[УСПІХ] Токен для юзера {userId} успішно збережено в базі!");
         }
     }
 }

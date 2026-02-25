@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using myFridge.DTOs.AIPhoto;
 using myFridge.DTOs.Products;
-using myFridge.Services;
 using myFridge.Services.Interfaces;
 using System.Security.Claims;
 namespace myFridge.Api.Controllers;
@@ -14,18 +12,11 @@ public class ProductsController : ControllerBase
 {
     private readonly IProductService _service;
 
-    public ProductsController(IProductService repository)
-    {
-        _service = repository;
-    }
-
-    // Helper: Витягуємо ID юзера з токена
-    // Цей метод викликається там, де потрібно фільтрувати дані по юзеру
+    public ProductsController(IProductService repository) =>  _service = repository;
+    
     private string GetUserId()
     {
-        var userId =
-            User.FindFirst("sub")?.Value ??
-            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (string.IsNullOrEmpty(userId))
             throw new UnauthorizedAccessException("User ID not found");
@@ -33,7 +24,6 @@ public class ProductsController : ControllerBase
         return userId;
     }
 
-    // 1. GET ALL (Отримати всі продукти користувача)
     [HttpGet] 
     public async Task<IActionResult> GetProducts([FromQuery] ProductFilterDto filter)
     {
@@ -49,7 +39,6 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 2. GET BY ID (Отримати конкретний продукт)
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -68,7 +57,6 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 3. CREATE (Створити продукт)
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateProductDto dto)
     {
@@ -80,12 +68,10 @@ public class ProductsController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Тут ловимо помилки валідації або доступу до StoragePlace
             return BadRequest(new { error = ex.Message });
         }
     }
 
-    // 4. UPDATE (Оновити продукт)
     [HttpPatch("{id}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductDto dto)
     {
@@ -104,7 +90,6 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 5. DELETE (Розумне видалення: soft або hard)
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -149,7 +134,6 @@ public class ProductsController : ControllerBase
             return BadRequest(new { message = "Масив продуктів порожній." });
         }
 
-        // 1. Витягуємо ID користувача з токена
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
 
         if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
@@ -157,7 +141,6 @@ public class ProductsController : ControllerBase
             return Unauthorized(new { message = "Не вдалося розпізнати користувача з токена." });
         }
 
-        // 2. ПЕРЕКЛАДАЄМО ScannedProductDto у CreateProductDto
         var productsToCreate = productsDto.Select(p => new CreateProductDto
         {
             Name = p.Name,
@@ -167,10 +150,9 @@ public class ProductsController : ControllerBase
             Expiration_Date = p.Expiration_Date,
             Storage_Place_Id = p.Storage_Place_Id,
             Comment = p.Comment,
-            UserId = userId // Присвоюємо ID з токена
+            UserId = userId 
         }).ToList();
 
-        // 3. Відправляємо ПРАВИЛЬНИЙ масив у сервіс
         await _service.CreateProductsBatchAsync(productsToCreate);
 
         return Ok(new { message = $"Успішно збережено {productsToCreate.Count} продуктів!" });

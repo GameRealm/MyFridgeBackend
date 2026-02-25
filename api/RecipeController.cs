@@ -11,11 +11,8 @@ public class RecipeController : ControllerBase
 {
     private readonly IRecipeGeneratorService _recipeService;
 
-    public RecipeController(IRecipeGeneratorService recipeService)
-    {
-        _recipeService = recipeService;
-    }
-
+    public RecipeController(IRecipeGeneratorService recipeService) =>  _recipeService = recipeService;
+    
     [HttpPost("generate")]
     public async Task<IActionResult> GenerateRecipes([FromBody] RecipeRequestDto request)
     {
